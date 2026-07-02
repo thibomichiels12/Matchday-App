@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0B0E0C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Matchday">
+<title>Matchday — Live Voetbalscores</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0E0C;
+    --surface:#141815;
+    --surface-alt:#1B211C;
+    --line:#242B25;
+    --lime:#C9F31D;
+    --text:#F2F4F1;
+    --muted:#8B948C;
+    --live:#FF3B30;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);height:100%;overscroll-behavior-y:contain;}
+  body{font-family:'Inter',sans-serif; padding-bottom:env(safe-area-inset-bottom);}
+  h1,h2,h3{font-family:'Oswald',sans-serif; margin:0; letter-spacing:0.02em;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  /* App bar */
+  .appbar{
+    position:sticky; top:0; z-index:10;
+    background:rgba(11,14,12,0.92); backdrop-filter:blur(10px);
+    padding:calc(env(safe-area-inset-top) + 14px) 16px 12px;
+    border-bottom:1px solid var(--line);
+  }
+  .appbar-row{display:flex; align-items:center; justify-content:space-between;}
+  .brand{display:flex; align-items:center; gap:8px;}
+  .brand-dot{width:10px;height:10px;border-radius:50%;background:var(--lime);}
+  .brand h1{font-size:19px; text-transform:uppercase; font-weight:700;}
+  .gear{background:none;border:none;color:var(--muted);font-size:20px;padding:6px;cursor:pointer;}
+
+  .datebar{display:flex; align-items:center; justify-content:space-between; margin-top:14px;}
+  .datebar button{background:var(--surface); border:1px solid var(--line); color:var(--text); width:34px;height:34px;border-radius:8px; font-size:16px; cursor:pointer;}
+  .date-label{font-family:'Oswald'; font-size:15px; text-transform:uppercase; color:var(--text); letter-spacing:0.03em;}
+  .date-sub{font-size:11px; color:var(--muted); text-align:center; margin-top:2px;}
+
+  /* halfway-line divider — signature element */
+  .halfway{display:flex; align-items:center; gap:10px; margin:22px 16px 10px;}
+  .halfway::before, .halfway::after{content:""; flex:1; height:1px; background:var(--line);}
+  .halfway-badge{display:flex; align-items:center; gap:8px; font-family:'Oswald'; font-size:13px; text-transform:uppercase; color:var(--muted); letter-spacing:0.04em; white-space:nowrap;}
+  .halfway-circle{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--lime);}
+
+  main{padding:4px 12px 40px;}
+
+  .match{
+    display:flex; align-items:center; gap:10px;
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    padding:12px 14px; margin-bottom:8px;
+  }
+  .match .team{flex:1; display:flex; align-items:center; gap:10px; min-width:0;}
+  .team.away{flex-direction:row-reverse; text-align:right;}
+  .crest{width:24px;height:24px;border-radius:50%;background:var(--surface-alt); flex-shrink:0; object-fit:contain; border:1px solid var(--line);}
+  .team-name{font-size:14px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .team-name.winner{color:var(--text); font-weight:600;}
+  .team-name.loser{color:var(--muted);}
+
+  .score-block{display:flex; flex-direction:column; align-items:center; min-width:64px;}
+  .score{font-family:'JetBrains Mono'; font-weight:700; font-size:18px; letter-spacing:0.05em;}
+  .status-row{display:flex; align-items:center; gap:5px; margin-top:3px;}
+  .live-dot{width:6px;height:6px;border-radius:50%;background:var(--live); animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+  .status-text{font-size:11px; color:var(--muted); text-transform:uppercase; font-family:'Oswald';}
+  .status-text.live{color:var(--live);}
+  .status-text.finished{color:var(--muted);}
+  .status-text.scheduled{color:var(--lime);}
+
+  .empty, .error, .loading{text-align:center; padding:60px 24px; color:var(--muted);}
+  .empty h3, .error h3{color:var(--text); font-size:16px; margin-bottom:6px;}
+  .empty p, .error p{font-size:13px; line-height:1.5;}
+  .retry-btn{margin-top:14px; background:var(--lime); color:#0B0E0C; border:none; padding:10px 18px; border-radius:8px; font-family:'Oswald'; font-weight:600; text-transform:uppercase; font-size:12px; cursor:pointer;}
+
+  .skeleton{background:var(--surface); border:1px solid var(--line); border-radius:12px; height:56px; margin-bottom:8px; position:relative; overflow:hidden;}
+  .skeleton::after{content:""; position:absolute; inset:0; background:linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent); animation:shimmer 1.3s infinite;}
+  @keyframes shimmer{0%{transform:translateX(-100%);}100%{transform:translateX(100%);}}
+
+  /* Settings modal */
+  .modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:20; display:none; align-items:flex-end;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:var(--surface); width:100%; border-radius:18px 18px 0 0; padding:20px 20px calc(env(safe-area-inset-bottom) + 20px); border-top:1px solid var(--line);}
+  .modal h2{font-size:16px; text-transform:uppercase; margin-bottom:4px;}
+  .modal p{font-size:13px; color:var(--muted); line-height:1.5; margin:6px 0 14px;}
+  .modal input{width:100%; background:var(--surface-alt); border:1px solid var(--line); color:var(--text); padding:12px; border-radius:8px; font-family:'JetBrains Mono'; font-size:13px; margin-bottom:12px;}
+  .modal .save-btn{width:100%; background:var(--lime); color:#0B0E0C; border:none; padding:13px; border-radius:8px; font-family:'Oswald'; font-weight:600; text-transform:uppercase; font-size:13px; cursor:pointer;}
+  .modal a{color:var(--lime); text-decoration:none;}
+  .modal-close{position:absolute; top:14px; right:16px; background:none; border:none; color:var(--muted); font-size:20px;}
+</style>
+</head>
+<body>
+
+<div class="appbar">
+  <div class="appbar-row">
+    <div class="brand"><span class="brand-dot"></span><h1>Matchday</h1></div>
+    <button class="gear" id="settingsBtn" aria-label="Instellingen">⚙</button>
+  </div>
+  <div class="datebar">
+    <button id="prevDay" aria-label="Vorige dag">‹</button>
+    <div>
+      <div class="date-label" id="dateLabel">Vandaag</div>
+      <div class="date-sub" id="dateSub"></div>
+    </div>
+    <button id="nextDay" aria-label="Volgende dag">›</button>
+  </div>
+</div>
+
+<main id="content">
+  <div class="skeleton"></div>
+  <div class="skeleton"></div>
+  <div class="skeleton"></div>
+</main>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" style="position:relative;">
+    <button class="modal-close" id="modalClose">✕</button>
+    <h2>API-sleutel</h2>
+    <p>Matchday gebruikt de gratis API van football-data.org. Je sleutel wordt alleen lokaal op dit toestel bewaard, nooit verstuurd naar iets anders dan football-data.org.</p>
+    <input type="text" id="apiKeyInput" placeholder="Plak hier je API-token">
+    <button class="save-btn" id="saveKeyBtn">Opslaan</button>
+    <p style="margin-top:10px;">Nog geen sleutel? <a href="https://www.football-data.org/client/register" target="_blank">Gratis registreren →</a></p>
+  </div>
+</div>
+
+<script>
+const COMPETITIONS = [
+  { code: "PL", name: "Premier League" },
+  { code: "PD", name: "La Liga" },
+  { code: "SA", name: "Serie A" },
+  { code: "BL1", name: "Bundesliga" },
+  { code: "FL1", name: "Ligue 1" },
+  { code: "DED", name: "Eredivisie" },
+  { code: "PPL", name: "Primeira Liga" },
+  { code: "CL", name: "Champions League" },
+  { code: "ELC", name: "Championship" },
+  { code: "BSA", name: "Brasileirão" }
+];
+
+let apiKey = localStorage.getItem("fd_api_key") || "";
+let currentOffset = 0; // days from today
+let useProxy = localStorage.getItem("fd_use_proxy") === "1";
+
+const content = document.getElementById("content");
+const dateLabel = document.getElementById("dateLabel");
+const dateSub = document.getElementById("dateSub");
+const modalOverlay = document.getElementById("modalOverlay");
+const apiKeyInput = document.getElementById("apiKeyInput");
+
+function fmtDateISO(d){
+  return d.toISOString().slice(0,10);
+}
+function fmtDateLabel(offset){
+  if(offset === 0) return "Vandaag";
+  if(offset === -1) return "Gisteren";
+  if(offset === 1) return "Morgen";
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return d.toLocaleDateString("nl-BE", { weekday: "long", day: "numeric", month: "short" });
+}
+
+function openSettings(){
+  apiKeyInput.value = apiKey;
+  modalOverlay.classList.add("open");
+}
+function closeSettings(){
+  modalOverlay.classList.remove("open");
+}
+document.getElementById("settingsBtn").addEventListener("click", openSettings);
+document.getElementById("modalClose").addEventListener("click", closeSettings);
+document.getElementById("saveKeyBtn").addEventListener("click", () => {
+  apiKey = apiKeyInput.value.trim();
+  localStorage.setItem("fd_api_key", apiKey);
+  closeSettings();
+  loadMatches();
+});
+
+document.getElementById("prevDay").addEventListener("click", () => { currentOffset--; loadMatches(); });
+document.getElementById("nextDay").addEventListener("click", () => { currentOffset++; loadMatches(); });
+
+function statusInfo(match){
+  const s = match.status;
+  if(s === "IN_PLAY" || s === "PAUSED"){
+    const min = match.minute ? match.minute + "'" : "LIVE";
+    return { cls: "live", text: min, showDot: true };
+  }
+  if(s === "FINISHED") return { cls: "finished", text: "Einde", showDot: false };
+  if(s === "SCHEDULED" || s === "TIMED"){
+    const t = new Date(match.utcDate);
+    const time = t.toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit" });
+    return { cls: "scheduled", text: time, showDot: false };
+  }
+  if(s === "POSTPONED") return { cls: "finished", text: "Uitgesteld", showDot: false };
+  if(s === "CANCELLED") return { cls: "finished", text: "Geannuleerd", showDot: false };
+  return { cls: "scheduled", text: s, showDot: false };
+}
+
+function scoreText(match){
+  const h = match.score.fullTime.home;
+  const a = match.score.fullTime.away;
+  if(h === null || h === undefined) return "–";
+  return `${h} – ${a}`;
+}
+
+function renderMatches(matchesByComp){
+  content.innerHTML = "";
+  const compCodes = Object.keys(matchesByComp);
+  if(compCodes.length === 0){
+    content.innerHTML = `
+      <div class="empty">
+        <h3>Geen wedstrijden</h3>
+        <p>Er staan geen wedstrijden gepland op deze dag in de gevolgde competities.</p>
+      </div>`;
+    return;
+  }
+  compCodes.forEach(code => {
+    const comp = matchesByComp[code];
+    const divider = document.createElement("div");
+    divider.className = "halfway";
+    divider.innerHTML = `<span class="halfway-badge"><span class="halfway-circle"></span>${comp.name}</span>`;
+    content.appendChild(divider);
+
+    comp.matches.forEach(match => {
+      const info = statusInfo(match);
+      const home = match.homeTeam.shortName || match.homeTeam.name;
+      const away = match.awayTeam.shortName || match.awayTeam.name;
+      const hs = match.score.fullTime.home, as = match.score.fullTime.away;
+      const homeWin = match.status === "FINISHED" && hs !== null && hs > as;
+      const awayWin = match.status === "FINISHED" && hs !== null && as > hs;
+
+      const row = document.createElement("div");
+      row.className = "match";
+      row.innerHTML = `
+        <div class="team home">
+          ${match.homeTeam.crest ? `<img class="crest" src="${match.homeTeam.crest}" alt="">` : `<div class="crest"></div>`}
+          <span class="team-name ${homeWin ? 'winner' : (awayWin ? 'loser' : '')}">${home}</span>
+        </div>
+        <div class="score-block">
+          <span class="score">${scoreText(match)}</span>
+          <span class="status-row">
+            ${info.showDot ? '<span class="live-dot"></span>' : ''}
+            <span class="status-text ${info.cls}">${info.text}</span>
+          </span>
+        </div>
+        <div class="team away">
+          ${match.awayTeam.crest ? `<img class="crest" src="${match.awayTeam.crest}" alt="">` : `<div class="crest"></div>`}
+          <span class="team-name ${awayWin ? 'winner' : (homeWin ? 'loser' : '')}">${away}</span>
+        </div>
+      `;
+      comp.matches_el = comp.matches_el || [];
+      content.appendChild(row);
+    });
+  });
+}
+
+function renderSkeleton(){
+  content.innerHTML = `<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>`;
+}
+
+function renderError(msg){
+  content.innerHTML = `
+    <div class="error">
+      <h3>Kan geen data ophalen</h3>
+      <p>${msg}</p>
+      <button class="retry-btn" id="retryBtn">Opnieuw proberen</button>
+    </div>`;
+  document.getElementById("retryBtn").addEventListener("click", loadMatches);
+}
+
+function renderNoKey(){
+  content.innerHTML = `
+    <div class="empty">
+      <h3>Nog geen API-sleutel</h3>
+      <p>Tik op ⚙ rechtsboven om je gratis football-data.org sleutel in te vullen.</p>
+      <button class="retry-btn" id="openSettingsBtn">Sleutel instellen</button>
+    </div>`;
+  document.getElementById("openSettingsBtn").addEventListener("click", openSettings);
+}
+
+async function fetchMatches(dateISO){
+  const base = `https://api.football-data.org/v4/matches?dateFrom=${dateISO}&dateTo=${dateISO}`;
+  const url = useProxy ? `https://corsproxy.io/?url=${encodeURIComponent(base)}` : base;
+  const res = await fetch(url, { headers: { "X-Auth-Token": apiKey } });
+  if(!res.ok){
+    const err = new Error("HTTP " + res.status);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
+async function loadMatches(){
+  const d = new Date();
+  d.setDate(d.getDate() + currentOffset);
+  const dateISO = fmtDateISO(d);
+  dateLabel.textContent = fmtDateLabel(currentOffset);
+  dateSub.textContent = d.toLocaleDateString("nl-BE", { day: "numeric", month: "long", year: "numeric" });
+
+  if(!apiKey){
+    renderNoKey();
+    return;
+  }
+
+  renderSkeleton();
+
+  try{
+    let data;
+    try{
+      data = await fetchMatches(dateISO);
+    } catch(networkErr){
+      // Likely a CORS block on direct calls — retry once through the proxy and remember the choice.
+      if(!useProxy){
+        useProxy = true;
+        localStorage.setItem("fd_use_proxy", "1");
+        data = await fetchMatches(dateISO);
+      } else {
+        throw networkErr;
+      }
+    }
+
+    if(data.errorCode || data.error){
+      renderError(data.message || "De API gaf een foutmelding terug. Controleer je sleutel in Instellingen.");
+      return;
+    }
+
+    const grouped = {};
+    (data.matches || []).forEach(m => {
+      const known = COMPETITIONS.find(c => c.code === m.competition.code);
+      const label = known ? known.name : m.competition.name;
+      const key = m.competition.code;
+      if(!grouped[key]) grouped[key] = { name: label, matches: [] };
+      grouped[key].matches.push(m);
+    });
+
+    renderMatches(grouped);
+  } catch(e){
+    if(e.status === 403){
+      renderError("Deze API-sleutel heeft geen toegang tot deze data. Controleer je sleutel in Instellingen.");
+    } else if(e.status === 429){
+      renderError("Te veel aanvragen naar de gratis API in korte tijd. Wacht een minuutje en probeer opnieuw.");
+    } else {
+      renderError("Er ging iets mis bij het ophalen van de wedstrijden. Controleer je internetverbinding en probeer opnieuw.");
+    }
+  }
+}
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
+
+if(!apiKey){
+  renderNoKey();
+  setTimeout(openSettings, 400);
+} else {
+  loadMatches();
+}
+</script>
+</body>
+</html>
